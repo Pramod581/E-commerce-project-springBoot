@@ -29,13 +29,13 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'mvn clean package'
+                sh 'cd JtProject && mvn clean package'
             }
         }
 
         stage('Test') {
             steps {
-                sh 'mvn test'
+                sh 'cd JtProject && mvn test'
             }
         }
 
@@ -51,7 +51,7 @@ pipeline {
 
                     sshagent(["${EC2_SSH_CRED_ID}"]) {
 
-                        sh "scp -o StrictHostKeyChecking=no target/*.jar ${EC2_USER}@${EC2_HOST}:${EC2_APP_PATH}"
+                       sh "scp -o StrictHostKeyChecking=no JtProject/target/*.jar ${EC2_USER}@${EC2_HOST}:${EC2_APP_PATH}"
 
                         sh '''
                         ssh -o StrictHostKeyChecking=no ''' + EC2_USER + '@' + EC2_HOST + ''' "
