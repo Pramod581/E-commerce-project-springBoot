@@ -2,59 +2,80 @@ pipeline {
     agent any
 
     environment {
-        // Define any environment variables here
+        // Project Info
         PROJECT_NAME = "E-commerce-project-springBoot"
-        GITHUB_REPO_URL = "https://github.com/jaygajera17/E-commerce-project-springBoot.git"
+        GITHUB_REPO_URL = "https://github.com/Pramod581/E-commerce-project-springBoot.git"
+
+        // Jenkins credentials injected as environment variables
+        DB_USER = credentials('ecommerce-db-secret').username
+        DB_PASSWORD = credentials('ecommerce-db-secret').password
+        EC2_SSH_CRED_ID = "ec2-ssh-key-id"
+
+        // Deployment Targets
+        EC2_USER = "ubuntu"
+        EC2_HOST = "54.215.41.3"          // Replace with your Terraform EC2 public IP
+        EC2_APP_PATH = "/home/ubuntu/app.jar"
+        RDS_ENDPOINT = "ecommerce-db.cbs6ioc2g5vw.us-west-1.rds.amazonaws.com"   // Replace with your actual RDS endpoint
     }
 
     stages {
         stage('Checkout') {
             steps {
-                // Checkout the code from the GitHub repository
-                git url: "${GITHUB_REPO_URL}", branch: 'main'
+                git branch: 'main', url: "${GITHUB_REPO_URL}"
             }
         }
-        
+
         stage('Build') {
             steps {
-                // Build the project using Maven
                 sh 'mvn clean package'
             }
         }
-        
+
         stage('Test') {
             steps {
-                // Run the tests
                 sh 'mvn test'
             }
         }
-        
-        stage('Deploy') {
+
+        stage('Deploy to EC2') {
             steps {
-                // Deploy the application (this can be customized as per your deployment process)
-                // For example, copying the built JAR file to a specific location, or deploying to a cloud service
-                sh '''
-                echo "Deploying application..."
-                # Example command: copying the built JAR file to a remote server
-                # scp target/*.jar user@remote-server:/path/to/deployment/directory
-                '''
+                sshagent([EC2_SSH_CRED_ID]) {
+                    sh """
+                        # Copy the built JAR to EC2
+                        scp target/*.jar ${EC2_USER}@${EC2_HOST}:${EC2_APP_PATH}
+
+                        # Inject DB credentials and RDS endpoint into application.properties
+                        ssh ${EC2_USER}@${EC2_HOST} "
+                            echo 'spring.datasource.username=${DB_USER}' | sudo tee -a /home/ubuntu/application.properties
+                            echo 'spring.datasource.password=${DB_PASSWORD}' | sudo tee -a /home/ubuntu/application.properties
+                            echo 'spring.datasource.url=jdbc:mysql://${RDS_ENDPOINT}:3306/ecommerce' | sudo tee -a /home/ubuntu/application.properties
+                        "
+
+                        # Restart the Spring Boot systemd service
+                        ssh ${EC2_USER}@${EC2_HOST} 'sudo systemctl restart springboot-app'
+                    """
+                }
+            }
+        }
+
+        stage('Validate Deployment') {
+            steps {
+                sh "curl -I http://${EC2_HOST}:8080"
             }
         }
     }
-    
+
     post {
         always {
-            // Actions to perform at the end of the pipeline
-            // For example, cleaning up workspace, sending notifications, etc.
             cleanWs()
         }
         success {
-            // Actions to perform if the pipeline succeeds
-            echo 'Pipeline succeeded!'
+            echo 'Pipeline completed successfully!'
         }
         failure {
-            // Actions to perform if the pipeline fails
-            echo 'Pipeline failed!'
+            echo 'Pipeline failed. Check logs.'
         }
     }
 }
+
+
