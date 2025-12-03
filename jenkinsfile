@@ -7,19 +7,12 @@ pipeline {
 
         EC2_SSH_CRED_ID = "ec2-ssh-key-id"
         EC2_USER = "ubuntu"
-        EC2_HOST = "54.215.41.3"
+        EC2_HOST = "54.176.77.0"
         EC2_APP_PATH = "/home/ubuntu/app.jar"
         RDS_ENDPOINT = "ecommerce-db.cbs6ioc2g5vw.us-west-1.rds.amazonaws.com"
     }
 
     stages {
-
-        stage('Debug Workspace') {
-            steps {
-                sh 'pwd'
-                sh 'ls -la'
-            }
-        }
 
         stage('Checkout') {
             steps {
@@ -29,13 +22,13 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'cd JtProject && mvn clean package'
+                sh 'cd JtProject && mvn clean package -DskipTests'
             }
         }
 
         stage('Test') {
             steps {
-                sh 'cd JtProject && mvn test'
+                sh 'cd JtProject && mvn test -Dspring.profiles.active=test'
             }
         }
 
@@ -49,17 +42,21 @@ pipeline {
                     )
                 ]) {
 
-                    sshagent(["${EC2_SSH_CRED_ID}"]) {
+                    sshagent([EC2_SSH_CRED_ID]) {
 
-                       sh "scp -o StrictHostKeyChecking=no JtProject/target/*.jar ${EC2_USER}@${EC2_HOST}:${EC2_APP_PATH}"
+                        sh """
+                        scp -o StrictHostKeyChecking=no JtProject/target/*.jar ${EC2_USER}@${EC2_HOST}:${EC2_APP_PATH}
+                        """
 
-                        sh '''
-                        ssh -o StrictHostKeyChecking=no ''' + EC2_USER + '@' + EC2_HOST + ''' "
-                        echo spring.datasource.username=$DB_USER | sudo tee /home/ubuntu/application.properties
-                        echo spring.datasource.password=$DB_PASSWORD | sudo tee -a /home/ubuntu/application.properties
-                        echo spring.datasource.url=jdbc:mysql://''' + RDS_ENDPOINT + ''':3306/ecommerce | sudo tee -a /home/ubuntu/application.properties
-                        "
-                        '''
+                        sh """
+                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
+                        pkill -f java || true
+                        echo "spring.datasource.username=${DB_USER}" > application.properties
+                        echo "spring.datasource.password=${DB_PASSWORD}" >> application.properties
+                        echo "spring.datasource.url=jdbc:mysql://${RDS_ENDPOINT}:3306/ecommerce" >> application.properties
+                        nohup java -jar ${EC2_APP_PATH} --spring.config.location=application.properties > app.log 2>&1 &
+                        '
+                        """
                     }
                 }
             }
@@ -67,6 +64,7 @@ pipeline {
 
         stage('Validate Deployment') {
             steps {
+                sh "sleep 10"
                 sh "curl -I http://${EC2_HOST}:8080"
             }
         }
@@ -86,6 +84,7 @@ pipeline {
         }
     }
 }
+
 
 
 
