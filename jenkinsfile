@@ -22,14 +22,14 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo "Building project (Free-tier optimized)"
+                echo "Building (Free tier mode)"
                 sh 'cd JtProject && MAVEN_OPTS="-Xmx512m" mvn clean package -DskipTests'
             }
         }
 
         stage('Test') {
             steps {
-                echo "Tests skipped (Free-tier memory limit)"
+                echo "Tests skipped (Free tier)"
             }
         }
 
@@ -65,7 +65,7 @@ pipeline {
 
         stage('Validate Deployment') {
             steps {
-                echo "Checking application..."
+                echo "Waiting for server..."
                 sh "sleep 15"
                 sh "curl -I http://${EC2_HOST}:8080 || true"
             }
@@ -76,19 +76,15 @@ pipeline {
         always {
             cleanWs()
         }
-
         success {
-            echo '✅ FREE-TIER PIPELINE SUCCESSFUL!'
+            echo '✅ FREE-TIER DEPLOYMENT SUCCESS'
         }
-
         failure {
-            echo '❌ PIPELINE FAILED (Check logs)'
+            echo '❌ PIPELINE FAILED'
         }
     }
 }
 
-    }
-}
 
 
 
