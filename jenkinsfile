@@ -7,8 +7,8 @@ pipeline {
 
         EC2_SSH_CRED_ID = "ec2-ssh-key-id"
         EC2_USER = "ubuntu"
-        EC2_HOST = "50.18.129.129"
-        EC2_APP_PATH = "/home/ubuntu/"
+        EC2_HOST = "13.56.193.207"
+        EC2_APP_PATH = "/home/ubuntu"
         RDS_ENDPOINT = "ecommerce-db.cbs6ioc2g5vw.us-west-1.rds.amazonaws.com"
     }
 
@@ -22,14 +22,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo "Building (Free tier mode)"
                 sh 'cd JtProject && MAVEN_OPTS="-Xmx512m" mvn clean package -DskipTests'
-            }
-        }
-
-        stage('Test') {
-            steps {
-                echo "Tests skipped (Free tier)"
             }
         }
 
@@ -45,19 +38,26 @@ pipeline {
 
                     sshagent([EC2_SSH_CRED_ID]) {
 
+                        // Copy JAR to EC2
                         sh """
-                        scp -o StrictHostKeyChecking=no JtProject/target/*.jar ${EC2_USER}@${EC2_HOST}:${EC2_APP_PATH}
+                        scp -o StrictHostKeyChecking=no JtProject/target/*.jar ${EC2_USER}@${EC2_HOST}:${EC2_APP_PATH}/
                         """
 
+                        // Run commands on EC2
                         sh """
-                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
-                        cd /home/ubuntu || exit;
-                        sudo pkill -f java || true;
-                        echo "spring.datasource.username=admin" > application.properties;
-                        echo "spring.datasource.password=${DB_PASSWORD}" >> application.properties;
-                        echo "spring.datasource.url=jdbc:mysql://${RDS_ENDPOINT}:3306/ecommerce" >> application.properties;
-                        nohup java -jar JtProject/target/*.jar --spring.config.location=/home/ubuntu/application.properties > app.log 2>&1 &
-                        '
+                        ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} "
+                          cd /home/ubuntu;
+
+                          sudo pkill -f java || true;
+
+                          echo 'spring.datasource.username=${DB_USER}' > application.properties;
+                          echo 'spring.datasource.password=${DB_PASSWORD}' >> application.properties;
+                          echo 'spring.datasource.url=jdbc:mysql://${RDS_ENDPOINT}:3306/ecommerce' >> application.properties;
+
+                          JAR_NAME=\\\$(ls -t *.jar | head -n 1);
+
+                          nohup java -jar \\\$JAR_NAME --spring.config.location=/home/ubuntu/application.properties > app.log 2>&1 &
+                        "
                         """
                     }
                 }
@@ -66,7 +66,6 @@ pipeline {
 
         stage('Validate Deployment') {
             steps {
-                echo "Waiting for server..."
                 sh "sleep 15"
                 sh "curl -I http://${EC2_HOST}:8080 || true"
             }
@@ -74,17 +73,15 @@ pipeline {
     }
 
     post {
-        always {
-            cleanWs()
-        }
         success {
-            echo '✅ FREE-TIER DEPLOYMENT SUCCESS'
+            echo '✅ Deployment Success!'
         }
         failure {
-            echo '❌ PIPELINE FAILED'
+            echo '❌ Deployment Failed'
         }
     }
 }
+
 
 
 
