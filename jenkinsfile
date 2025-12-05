@@ -7,7 +7,7 @@ pipeline {
 
         EC2_SSH_CRED_ID = "ec2-ssh-key-id"
         EC2_USER = "ubuntu"
-        EC2_HOST = "13.56.193.207"
+        EC2_HOST = "18.144.34.236"
         EC2_APP_PATH = "/home/ubuntu"
         RDS_ENDPOINT = "ecommerce-db.cbs6ioc2g5vw.us-west-1.rds.amazonaws.com"
     }
